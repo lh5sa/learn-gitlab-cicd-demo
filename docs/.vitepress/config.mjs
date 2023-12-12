@@ -26,7 +26,7 @@ export default defineConfig({
     socialLinks: [
       {
         icon: "github",
-        link: "https://gitlab.com/liaohui5/learn-gitlab-runner-demo",
+        link: "https://gitlab.com/liaohui5/learn-gitlab-cicd-demo",
       },
     ],
   },

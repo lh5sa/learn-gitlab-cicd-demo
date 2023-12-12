@@ -85,19 +85,11 @@ deploy_with_ssh_key_jobs:
     - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" >> ~/.ssh/config
   script: |
     ls -al
-
-    # 1.清除上次构建缓存(如果构建多次的话)
     echo "===== 1.start deployment ====="
     ssh -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "rm -rf ~/deploy-dir && mkdir ~/deploy-dir"
-
-    # 2.上传文件
     echo "===== 2.start upload files ====="
     scp -P$SERVER_PORT ./artifacts.tar $SERVER_USER@$SERVER_ADDR:~/deploy-dir/artifacts.tar
     echo "===== 3.upload completed ====="
-
-    # 3.解压缩
     ssh -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && tar -zxvf ./artifacts.tar"
     echo "===== 4.unzip completed ====="
-
-    # 4.执行 run.sh 这个 shell 脚本
     ssh -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && chmod +x ./run.sh && ./run.sh"
