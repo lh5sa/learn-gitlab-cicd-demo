@@ -1,0 +1,26 @@
+image: node:18
+
+stages:
+  - build
+  - deploy
+
+cache:
+  key:
+    files: 
+      - package.json
+  paths:
+    - node_modules
+
+# 发布到 gitlab-pages(提交 main 分支的时候执行)
+pages:
+  stage: build
+  script: |
+    npm install 
+    npm run docs:build
+    echo "===== build completed =====";
+
+  artifacts:
+    paths:
+      - ./public
+  only: 
+    - main
