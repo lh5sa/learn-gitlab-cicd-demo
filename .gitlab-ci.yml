@@ -6,12 +6,11 @@ stages:
 
 cache:
   key:
-    files: 
+    files:
       - package.json
   paths:
     - node_modules
 
-# 发布到 gitlab-pages(提交 main 分支的时候执行)
 pages:
   stage: build
   script: |
@@ -22,10 +21,10 @@ pages:
   artifacts:
     paths:
       - ./public
-  only: 
+  only:
     - main
 
-# 发布到指定的服务器
+# 打包任务
 build_jobs:
   stage: build
   script: |
@@ -38,25 +37,67 @@ build_jobs:
   artifacts:
     paths:
       - ./artifacts.tar
-  only: 
-    - deploy2server
-
-# 发布到指定服务器(提交 deploy2server 分支的时候执行)
-deploy_jobs:
-  stage: deploy
-  # 只是在 push 代码到 deploy2server 分支的时候触发
   only:
     - deploy2server
-  # 使用这个镜像就可以直接使用 sshpass 命令
+    - deploy_with_ssh_key
+
+# 发布到指定服务器(使用 sshpass 命令)
+deploy_jobs:
+  stage: deploy
+  only:
+    - deploy2server
   image: ringcentral/sshpass:latest
   script: |
     ls -al
     echo "===== 1.start deployment ====="
     sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "rm -rf ~/deploy-dir && mkdir ~/deploy-dir"
-    echo "===== 2.start upload files ====="
+    echo "===== 2.clear completed ====="
     sshpass -p $SERVER_PASS scp -o StrictHostKeyChecking=no -P$SERVER_PORT ./artifacts.tar $SERVER_USER@$SERVER_ADDR:~/deploy-dir/artifacts.tar
     echo "===== 3.upload completed ====="
     sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && tar -zxvf ./artifacts.tar"
     echo "===== 4.unzip completed ====="
     sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && chmod +x ./run.sh && ./run.sh"
-    echo "===== 5.deploy completed ====="
+
+# 发布到指定服务器, 并且使用 ssh private key
+deploy_with_ssh_key_jobs:
+  # 在部署阶段执行
+  stage: deploy
+
+  # 提交 deploy_with_ssh_key 分支的时候执行
+  only:
+    - deploy_with_ssh_key
+
+  # 在 ubuntu 镜像中完成这些操作
+  image: ubuntu
+  before_script:
+    ## 安装 openssh 客户端和 git
+    - which ssh-agent || ( apt-get update -y && apt-get install openssh-client git -y )
+
+    ## 添加 private key
+    - mkdir -p ~/.ssh
+    - eval "$(ssh-agent -s)"
+    - ssh-add <(echo "$SSH_PRIV_KEY")
+
+    ## 添加 known_hosts
+    - ssh-keyscan -H "$SERVER_ADDR" >> ~/.ssh/known_hosts
+
+    ## 修改 ssh 配置
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" >> ~/.ssh/config
+  script: |
+    ls -al
+
+    # 1.清除上次构建缓存(如果构建多次的话)
+    echo "===== 1.start deployment ====="
+    ssh -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "rm -rf ~/deploy-dir && mkdir ~/deploy-dir"
+
+    # 2.上传文件
+    echo "===== 2.start upload files ====="
+    scp -P$SERVER_PORT ./artifacts.tar $SERVER_USER@$SERVER_ADDR:~/deploy-dir/artifacts.tar
+    echo "===== 3.upload completed ====="
+
+    # 3.解压缩
+    ssh -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && tar -zxvf ./artifacts.tar"
+    echo "===== 4.unzip completed ====="
+
+    # 4.执行 run.sh 这个 shell 脚本
+    ssh -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && chmod +x ./run.sh && ./run.sh"
