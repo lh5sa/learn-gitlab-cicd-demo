@@ -24,3 +24,39 @@ pages:
       - ./public
   only: 
     - main
+
+# 发布到指定的服务器
+build_jobs:
+  stage: build
+  script: |
+    npm install 
+    npm run docs:build
+    tar -zcvf artifacts.tar ./run.sh ./public/*
+    ls -al
+    echo "===== build completed =====";
+
+  artifacts:
+    paths:
+      - ./artifacts.tar
+  only: 
+    - deploy2server
+
+# 发布到指定服务器(提交 deploy2server 分支的时候执行)
+deploy_jobs:
+  stage: deploy
+  # 只是在 push 代码到 deploy2server 分支的时候触发
+  only:
+    - deploy2server
+  # 使用这个镜像就可以直接使用 sshpass 命令
+  image: ringcentral/sshpass:latest
+  script: |
+    ls -al
+    echo "===== 1.start deployment ====="
+    sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "rm -rf ~/deploy-dir && mkdir ~/deploy-dir"
+    echo "===== 2.start upload files ====="
+    sshpass -p $SERVER_PASS scp -o StrictHostKeyChecking=no -P$SERVER_PORT ./artifacts.tar $SERVER_USER@$SERVER_ADDR:~/deploy-dir/artifacts.tar
+    echo "===== 3.upload completed ====="
+    sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && tar -zxvf ./artifacts.tar"
+    echo "===== 4.unzip completed ====="
+    sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no -p$SERVER_PORT $SERVER_USER@$SERVER_ADDR "cd ~/deploy-dir && chmod +x ./run.sh && ./run.sh"
+    echo "===== 5.deploy completed ====="
